@@ -1,0 +1,16 @@
+
+Complete this TODO list.
+
+Finish initial continuation implementation.
+
+Finish process management functions.
+
+Document invocations.
+
+Document LES under the design folder.
+
+Implement exception handling and remove (error) place holder macro.
+
+Implement Object system.
+
+Write the interpreter $program to link the code to.
