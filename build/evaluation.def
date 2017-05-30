@@ -1,0 +1,41 @@
+
+($source ("" "src" "evaluation" "eval.les")
+	($macro "" "macro" "simplify.les")
+	($import environment (lookup) ())
+	($export evaluation (internal) (eval))
+	($export kernel (applicative) (eval)))
+
+($source ("" "src" "evaluation" "apply.les")
+	($macro "" "macro" "simplify.les")
+	($import evaluation (eval) ())
+	($import environment (blank-environment) ())
+	($export evaluation (internal) (apply))
+	($export kernel (applicative) (apply)))
+
+($source ("" "src" "evaluation" "sequence.les")
+	($macro "" "macro" "simplify.les")
+	($import evaluation (eval) ())
+	($export evaluation (aux) (sequence-aux))
+	($export kernel ($sequence) ()))
+
+($source ("" "src" "evaluation" "type_check.les")
+	($macro "" "macro" "type_check.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel
+		(inert? ignore? symbol? operative? applicative? combiner?)
+		()))
+
+($source ("" "src" "evaluation" "wrap.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (wrap unwrap) ()))
+
+($source ("" "src" "evaluation" "make.les")
+	($macro "" "macro" "simplify.les")
+	($import evaluation (sequence-aux) ())
+	($import environment (assign!) ())
+	($export kernel ($vau $lambda) ()))
+
+($source ("" "src" "evaluation" "if.les")
+	($macro "" "macro" "simplify.les")
+	($import evaluation (eval sequence-aux) ())
+	($export kernel ($if $cond) ()))

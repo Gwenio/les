@@ -1,0 +1,78 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	Internal
+;
+;	Summary: Gets the current continuation.
+($define current_continuation
+	($closure _ _
+		($let cc (get_local (system cc) #inert)
+			($if (inert? cc)
+				(list #inert . 0)
+				($let (order . _) ($unseal continuation cc)
+					(list cc . order))))))
+
+;	Internal
+;
+;	Summary: Creates new continuations.
+($define factory
+	($closure _ (outer . inner)
+		($seal continuation
+			($let (parent . order) (apply current_continuation)
+				(list (+ order 1) (process) outer inner parent 0 .
+					(mutable local (list 0 . ())))))))
+
+;	Internal
+;
+;	Summary: Used by normal_pass to iterate over continuation internals.
+($define iterate
+	($closure loop (x . list)
+		($if (pair? list) x
+			($let ((_ type . y) . tail) ()
+				(apply loop
+					($if (equal? type ($quote . extend))
+						(apply y x)
+						x) . tail)))))
+
+;	Internal
+;
+;	Summary: Handles extensions to a continuation on normal returns.
+($define normal_pass
+	($closure _ (x . cc)
+		($let (_ _ _ _ _ _ . var) ($unseal continuation cc)
+			($let (_ . list) (get var)
+				(apply iterate x . list)))))
+
+;
+($define call/cc ($closure _ (func)
+	($let/cc outer
+		($let cc
+			($let/cc inner
+				(apply factory outer . inner))
+			(set_local (system cc) cc)
+			(apply normal_pass . (apply func cc))))))
+
+;	Summary: The applicative version of call/cc.
+($define $let/cc ($combiner env x (sym . body)
+	($let/cc outer
+		($let cc
+			($let/cc inner
+				(apply factory outer . inner))
+			(set_local (system cc) cc)
+			(apply normal_pass .
+				(apply sequence-aux
+					(assign! (make-environment env) sym cc) . body))))))

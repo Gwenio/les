@@ -1,0 +1,54 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	(apply app args . opt)
+;	Applicative - does not capture current environment.
+;
+;	Summary: Applies an applicative to a list of arguments in an environment.
+;
+;	Returns: The result of evaluating app.
+;
+;	Parameters:
+;	app		A tree of the keys to assign values to.
+;	args	The values to assign.
+;	opt		Optional parameter that should be () or a pair with
+;			an environment in the car position and () in the cdr.
+;			If it is () then an empty environment with no parents
+;			will be used.
+;
+;	Details:
+;		Raises an error if opt is not () or an environment.
+;		Also raises and error if app is not an applicative.
+($define internal ($closure _ (app args . opt)
+	($define env
+		($if (null? opt)
+			(apply blank-environment)
+			($if (pair? opt)
+				(car opt)
+				(error)))
+	($if ($seal_type? applicative app)
+		(apply eval (list ($unseal applicative app) . args) env)
+		(error))))
+
+;	Summary: Applicative for apply.
+($define applicative ($seal applicative
+	($closure _ (_ . x)
+		($if (pair? x)
+			($if (pair? (cdr x))
+				(apply internal . x)
+				(error))
+			(error)))))

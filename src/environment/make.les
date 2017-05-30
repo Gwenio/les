@@ -1,0 +1,48 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	Internal.
+;
+;	Summary: Equivalent to (make-environment).
+($define blank
+	($closure _ ()
+		($seal environment (list (agent ())))))
+
+;	(make-environment . parents)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: Makes a new empty environment with a set of parent environments.
+;
+;	Returns: A new environment.
+;
+;	Parameters:
+;	parents	() or a list of environments that environment would return #true for.
+($define make ($closure _ parents
+	($if (null? parents)
+		($seal environment (list (mutable agent ())))
+		($if (apply environment? . parents)
+			($seal environment (list (agent ()) . parents))
+			(error)))))
+
+;	Summary: Applicative for make-environment.
+($define applicative ($seal applicative
+	($closure _ (_ . x)
+		($if (null? parents)
+			($seal environment (list (mutable agent ())))
+			($if (apply environment? . parents)
+				($seal environment (list (agent ()) . parents))
+				(error))))))

@@ -1,0 +1,7 @@
+
+There are three languages that exist for the project:
+	-	LES, the language which is the main goal
+	-	PLES, a language for defining the reference implementation of LES
+	-	ALES, a language for expressing the operational semantics of PLES
+
+All languages that are a part of the project use a restricted subset of the syntax of LES.

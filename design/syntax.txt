@@ -1,0 +1,251 @@
+
+Table of Contents:
+	I	Introduction
+	II	Lexical Structure
+		1.	Tokens
+		2.	Comments
+		3.	Symbols
+		4.	Characters
+		5.	Strings
+		6.	Numbers
+		7.	Ignore
+		8.	Literals
+	III	Expressions
+	IV	Parsing
+	V	Rational
+
+
+
+I	Introduction
+
+	The syntax of LES is derived from the Kernel Lisp dialect;
+however, the Kernel specification does not have a complete formal
+description of its syntax. As such the syntax in the Scheme r7rs
+Small Language is used as a point of reference.
+
+	To make it easier to compare to Scheme, the syntax is described
+in extended BNF which the same conventions as r7rs. This includes
+all spaces being purely for legibility, case being insignificant,
+<empty> stands for an empty string, and the two extensions Scheme
+makes to indicate repetition. Those extensions are <thing>* means
+<thing> occurs zero or more times and <thing>+ means it occurs
+at least once.
+
+	Additionally, <eoi> represents the end of input. <thing>?
+represents <thing> should be next in the input, but should
+not be included in the current item (peek for it). Character
+classes from POSIX regular expression are used in the form
+<:class:> where class would be the name of the character class.
+
+	Recursion occurs on the right hand side of rules.
+Alternatives are tried in left to right order.
+
+
+II	Tokens
+
+1.	Tokens
+
+<token> -> <value> <delimiter>? | <omitted> | ( | ) | .
+
+<value> -> <number> | <symbol> | <character> | <string> | <ignore> | <literal>
+
+<omitted> -> <:space:> | <comment>
+
+<delimiter> -> <:space:> | ( | ) | " | ' | ; | . | @ | <eoi>
+
+<sign> -> + | -
+
+<hex escape> -> \x <:xdigit:>+
+
+<inline hex escape> -> <hex escape> ;
+
+	<value> tokens represent tokens that produce a value
+in the resulting data structure.
+
+	<omitted> tokens are discarded.
+
+	<delimiter> is used to check for the end of other
+token types.
+
+	<sign> is used in defining both <number> and <symbol>
+
+2.	Comments
+
+<comment> -> ; <comment content>*
+
+<comment content> -> <:graph:> | <:blank:>
+
+3.	Symbols
+
+<symbol> -> <initial> <subsequent>* | <sign> <sign subsequent> <subsequent>* | <sign>
+
+<initial> -> <inline hex escape> | <:alpha:> | ! | $ | % | & | * | / | : | < | = | > | ? | ^ | ~
+
+<subsequent> -> <initial> | <sign> | <:digit:> | _ | <not final> <subsequent>
+
+<sign subsequent> -> <initial> | <sign> | _ | <not final> <subsequent>
+
+<not final> -> @ | .
+
+	-
+
+4.	Characters
+
+<character> -> ' <hex escape> | '\ <:graph:> | ' <:graph:>
+
+5.	Strings
+
+<string> -> " <string next>
+
+<string next> -> " | <string element> <string next>
+
+<string element> -> <inline hex escape> | \ <:graph:> | <:graph:> | <:blank:>
+
+6.	Numbers
+
+	In the following definitions, the upper case R
+stands for the numeric base used. It can be 2, 8,
+10, and 16 for binary, octal, decimal, and hexadecimal
+respectively. If their is no <prefix R> then R is 10.
+<float R> is only defined when R is 10.
+
+	<exactness> if present makes the number be
+exact if it is 'e' or inexact if 'i'. If it is not
+present in the prefix or if their is no prefix
+then it up to the implementation to choose.
+
+<number> -> <prefix R> <complex R> | <complex 10>
+
+<prefix R> -> <radix R> <exactness> :
+
+<exactness> -> e | i | <empty>
+
+<radix 2> -> 2
+
+<radix 8> -> 8
+
+<radix 10> -> 10
+
+<radix 16> -> 16
+
+<infinity> -> +inf | -inf | +nan
+
+<complex R> -> <real R> <imaginary R> | <real R> <sign> i | <imaginary R> | <real R> | <sign> i
+
+<real R> -> <infinity> | <sign> <simple R> | <simple R>
+
+<imaginary R> -> <infinity> i | <sign> <simple R> i
+
+<simple R> -> <float R> | <fractional R> | <integer R>
+
+<fractional 10> -> <integer 10> / <integer 10>
+
+<float 10> -> <integer 10> . <integer 10> <exponent> | <integer 10> . <integer 10>
+
+<exponent> -> e <sign> <integer 10> | e <integer 10>
+
+<integer R> -> <digit R>+
+
+<digit 2> -> 0 | 1
+
+<digit 8> -> 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7
+
+<digit 10> -> <:digit:>
+
+<digit 16> -> <:xdigit:>
+
+7.	Ignore
+
+<ignore> -> _ <symbol> | _
+
+	Is equivalent to #ignore in the literals section.
+The first form exists to document what the ignored value
+would be if it was not ignored. The latter is a shorthand
+provided as things that are being ignored should not be
+time consuming.
+
+8.	Literals
+
+<literal> -> # <standard literal> | <implementation specific literal>
+
+<standard literal> -> inert | ignore | null | true | false | file | line | t | f
+
+<implementation specific literal> -> # _ _ <symbol>
+
+	As the name implies, <implementation specific literal>
+is the form for literals with an implementation specific
+meaning.
+
+	The meaning of each standard literal is as follows:
+
+-	#t and #true are both a boolean with a value of true.
+
+-	#f and #false are both a boolean with a value of true.
+
+-	#null is the literal for an empty list or a zero element
+tuple.
+
+-	#ignore is a literal for indicated a value should be
+ignored when matching values against a parameter tree to
+assign to an environment.
+
+-	#inert is a literal to be returned by functions to
+avoid providing a meaningful return value.
+
+-	#file should be expanded to a string naming the source
+of the input being parsed.
+
+-	#line should be expanded to a integer equal to the number
+of the line it was found on.
+
+
+III	Expressions
+
+<expression> -> <omitted>* <expr> <omitted>*
+
+<expr> -> <value> | <blob> | <sexpr> | <null>
+
+<blob> -> @( <blob content>* )
+
+<blob content> -> <ommitted> | <byte>
+
+<byte> -> <:xdigit:> <:xdigit:>
+
+<sexpr> -> ( <expression>+ <tail expr> )
+
+<tail expr> -> . <expression> | <empty>
+
+<null> -> ( <omitted> )
+
+	As mentioned in Tokens, <omitted> does not contribute to
+the data structure constructed from parsing.
+
+	<sexpr> constructs a list of pairs, with each <expression>
+being in the head and the rest of the <sexpr> being the tail.
+<tail expr> sets the value of the last pair in the list. If
+it is <empty> then the list is terminated with #null; otherwise,
+the expression it contains is placed at the end of the list.
+
+	<null> is equivalent to the literal #null.
+
+	<blob> encodes a block of unformatted data as hexadecimal.
+The first hex value in each <byte> is the higher value part of
+a byte while the second is the lower half.
+
+
+IV	Parsing
+
+<input stream> -> <expression>* <eoi>
+
+	Let <input stream> represent a sequence of inputs to be
+processed by the parser. Each <expression> becomes an element
+in a list of pair, and when <eoi> is reached the tail of the
+most recent pair is #null. If <eoi> is reached without any
+<expression>s, then the produced value is #null.
+
+	In other words, <input stream> is treated as an <expression>
+that starts with ( and ends with ).
+
+V	Rational
+
+The rational of various design decisions coming later.

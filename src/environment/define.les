@@ -1,0 +1,55 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	($define! keys values)
+;	Operative - captures current environment.
+;
+;	Summary: Assigns values to symbolic keys in the calling environment.
+;
+;	Returns: #inert
+;
+;	Parameters:
+;	keys	A tree of the keys to assign values to.
+;	values	The values to assign.
+;
+;	Details:
+;		$define! is equivalent to the Kernel language operative of the same name.
+;		The keys parameter should follow the following format:
+;			<keys> -> <symbol> | #ignore | #null | (<keys> . <keys>)
+:		Additionally each <symbol> should only appear once in the tree.
+;		Let the environment be E, the keys be K, and the values be V:
+;		-	If K is a symbol bind K to V in E.
+;		-	If K is #ignore do nothing.
+;		-	If K is #null then V must also be #null.
+;		-	If K is a pair then V must be a pair. Match the car of K to the car
+;				of V and the cdr of K to the cdr of V.
+;
+;		If an error occurs no changes should be made to the environment.
+;		No change should be observable until the operation has completed.
+;		Only one $define! maybe in progress for an environment at a time.
+;		The calling process should block until the call completes.
+;		Any lookups in progress or started before completion will use the existing
+;		symbol table.
+($define $define! ($closure _ (env . x)
+	($if (pair? x)
+		($let (keys . x) x
+			($if (pair? x)
+				($if (null? (cdr x))
+					(apply assign! env keys (apply eval (car x) env))
+					(error))
+				(error)))
+		(error))))

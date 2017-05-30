@@ -1,0 +1,17 @@
+
+;
+($define aux ($closure loop (binary accumulator . list)
+	($cond
+		((pair? list)
+			($let (head . tail) list
+				(apply loop binary (apply binary accumulator head) . tail)))
+		((null? list) accumulator)
+		(#t (error)))))
+
+;
+($define internal ($closure _ (list binary identity)
+	($cond
+		((null? list) identity)
+		((pair? list)
+			(apply aux binary . list))
+		(#t (error)))))

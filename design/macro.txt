@@ -1,0 +1,387 @@
+
+Table of Contents:
+	I	Introduction
+	II	Structure of Macros
+		1.	Declaration
+			A.	Form
+			B.	Public Name
+			C.	Private Name
+			D.	Captures
+			E.	Body
+		2.	Expressions
+	III	Standard Macros
+		1.	Defaults
+		2.	Control Flow
+		3.	Variables, Scopes, and $bind
+		4.	Type Checks
+		5.	Comparison and Boolean Algebra
+		6.	Lists
+		7.	Errors and Warnings
+
+
+
+I	Introduction
+
+	Macros are rules for automatic rewriting of files
+that follow the LES syntax. While unneeded in LES which
+has better tools for achieving the same results, those
+tools cannot be included in PLES as they greatly increase
+the difficulty of compiling code.
+
+	The tools in question are first class operatives and
+environments. Their presence makes the meaning of any
+particular piece of code uncertain until extensive
+proofs are made about what various symbols used can
+have bound to them in the environment.
+
+	Macros do not suffer from this problem as they are
+not first class and will disappear early in the compiling
+process. This is one of the reasons the descendants of
+Lisp have macros and not FEXPRs which were the precursor
+to Kernel's operatives.
+
+	The particular subset of LES used for macros will
+be referred to as MLES. MLES is for the time being
+placed in separate files from PLES code and will
+be applied during the build process as specified
+in the build definition file for the source.
+
+
+II	Structure of Macros
+
+1.	Declaration
+
+A.	Form
+
+A macro is declared in the following form:
+
+(pubic_name private_name capture . body)
+
+B.	Public Name
+
+	'public_name' can be a symbol, #null, #ignore, #inert,
+or a list to give multiple public names.
+
+	If it is a symbol, then list expressions in the target
+that have the same symbol at their head will be expanded
+with the macro.
+
+	If it is #null, then the macro defines the expansion of
+the root of the target. As mentioned in the syntax
+documentation, each expression at the base level of an
+input source is placed into a list and the #null macro is
+used to process this list.
+
+	If it is #ignore, then it defines a catch all for all
+things not processed by another macro. This includes lists
+other than the root that do not start with a symbol, lists
+starting with a symbol for which no macro has bound as a
+public name, and non-list constants.
+
+	If it is #inert then the macro does not have a public
+name initially. Public names can be added on a temporary
+basis with the $bind built in.
+
+	Finally, if it is a list it can contain multiple symbols
+to bind as public names. If #ignore is in the list then the
+macro will be a catch all. If #null is in the list outside
+of the tail position then the macro will process the root
+of the input. #inert may not be present in the list. The
+tail of the list must be #null.
+
+C.	Private Name
+
+	'private_name' is the name to be used to call it
+from within other macros or to refer to it for binding
+to a public name with the $bind built in. The private
+name must be a symbol unless 'public_name' was a symbol,
+in which case it may be #ignore to have the public and
+private names be the same.
+
+	In some standard macro definitions the private name
+will be #inert to indicate that it does not have one and
+is a default binding for a public name when no other macro
+is bound to it.
+
+D.	Capture
+
+	'capture' is a list containing symbols, #ignore, #null,
+and lists containing the same items. The list being expanded
+by a macro will have its elements matched against 'capture'.
+The rules for the matching are as follows:
+
+-	If capture is a pair, then it must match against a pair.
+	The head and tail of capture will be matched against the
+	head and tail of the input respectively.
+
+-	If capture is #null, then the input it is matched with
+	must also be #null. If not an error is raised aborting
+	macro expansion.
+
+-	If capture is #ignore, then the input is discarded.
+
+-	If capture is a symbol, then the input it is matched
+	with will be bound to that symbol as a local variable.
+
+E.	Body
+
+	'body' is #null or a list of operations to preform
+for expansion with a tail of #null.
+
+	If it is #null then the input will be expanded to
+a new list. The head of the new list will be the public
+or private name that invoked the macro. If it was invoked
+as the root (#null macro) or the catch all (#ignore macro)
+the private name will be a the head. Each element of the
+list that is matched against a symbol from capture will
+be expanded. Otherwise they will be copied as is to the
+new list.
+
+	If a list is given for the body, it will be treated
+as a sequence and each instruction will be processed in
+order. The value the last instruction evaluates to will
+be what the macro expands to. The evaluation of expressions
+in the body of a macro will be explained in the Expressions
+section.
+
+2.	Expressions
+
+	Expressions are expected to have a symbol at the
+head of the list naming the private name of a macro.
+
+	Symbols in the rest of the list are replaced with
+the value bound to them if they are a local variable.
+If they have not been bound as a variable, then they
+evaluate to themselves
+
+	Macros binding and variable bindings are
+separate; therefore, symbols used for public and
+private names of macros will not affect the evaluation
+of symbols not at the head of an expression.
+
+	Once symbols are resolved, the resulting list
+of arguments will be matched against the target
+macro's capture list and then the macro is
+expanded.
+
+	Some standard macros skip symbol resolution
+for some of their arguments. Such built ins have
+their private name start with a '$' to make them
+easier to identify.
+
+III	Standard Macros
+
+1.	Defaults
+
+	The following are the default definition for
+the root macro and catch all if no other macro
+is bound to them. #inert is used as the private
+name as they cannot be specifically referred to.
+
+(() #inert body
+	($if (null? body) ; can only be #null or a pair
+		#null
+		(expand-each body))
+
+(_ #inert expr
+	($if (pair? expr)
+		($if (symbol? (car expr))
+			(cons
+				(car expr)
+				(expand-each (cdr expr)))
+			(expand-each expr))
+		expr) ; if not a list then leave it be
+
+2.	Control Flow
+
+;	$sequence expects body to be a list
+;	with #null at the tail.
+;	Each element of the list are evaluated
+;	as expressions just like those in the
+;	body of a macro.
+;	$sequence evaluates to the value
+;	of the last expression in the list.
+(#inert $sequence body)
+
+;	'test' is an expression that much
+;	evaluate to a boolean.
+;	If test is #true then 'x' is evaluated;
+;	otherwise, if #false 'y' is evaluated.
+(#inert $if (test x y))
+
+;	Conditional for a series of tests.
+(#inert $cond ((test . body) . clauses)
+	($if test
+		($sequence . body)
+		($cond . clauses)))
+
+;	expand is used to resume macro expansion.
+;	'expr' is not treated as the root of input.
+;
+;	Example:
+;	(foo _ (x y) (list foo x (expand . y)))
+;
+;	Is the same as:
+;	(foo _ (_ y))
+;
+;	Assuming foo is invoked under the name 
+;	'foo'.
+(#inert expand expr)
+
+;	Suppresses evaluation of _expr.
+;	This includes preventing symbols
+;	from being treated as variables.
+(#inert $quote (_expr))
+
+3.	Variables, Scopes, and $bind
+
+;	The expression passed to keys
+;	is not evaluated and must match
+;	the same format as the capture
+;	of a macro.
+;
+;	Values are matched against keys
+;	the same way input is matched
+;	against a capture and variables
+;	are bound in the current scope.
+;
+;	$define evaluates to #inert.
+(#inert $define (keys values))
+
+;	$scope is the same as $sequence
+;	except that any variables made
+;	with $define or macro bindings
+;	made with $bind are removed after
+;	the body is evaluated.
+(#inert $scope body)
+
+;	$let is like ($scope ($define keys values) . body)
+;	except that values is evaluated in the current
+;	scope rather than the newly created scope.
+(#inert $let (keys values . body))
+
+;	$bind creates temporary public macro name
+;	bindings that are removed when the calling
+;	macro completes or the current scope is
+;	exited.
+;
+;	$bind does not have its arguments evaluated
+;	before receiving them.
+;
+;	'public' is a public name or list of names
+;		to bind the macro specified by 'private'
+;		to.
+;	'private' should be a symbol that is the
+;		private name of the macro to make bindings
+;		for or #inert meaning to remove the existing
+;		bindings for the public names.
+;
+;	If used to remove the bindings for the root or
+;	catch all macro, they will return to their default
+;	definitions.
+;
+;	$bind evaluates to #inert.
+(#inert $bind (public private))
+
+4.	Type Checks
+
+;	Checks if x is #inert and returns
+;	a boolean indicating the result.
+(#inert inert? (x))
+
+;	Checks if x is #ignore and returns
+;	a boolean indicating the result.
+(#inert ignore? (x))
+
+;	Checks if x is #null and returns
+;	a boolean indicating the result.
+(#inert null? (x))
+
+;	Checks if x is a boolean and returns
+;	a boolean indicating the result.
+(#inert boolean? (x))
+
+;	Checks if x is a symbol and returns
+;	a boolean indicating the result.
+(#inert symbol? (x))
+
+;	Checks if x is a string and returns
+;	a boolean indicating the result.
+(#inert string? (x))
+
+;	Checks if x is a numeric value and returns
+;	a boolean indicating the result.
+(#inert number? (x))
+
+;	Checks if x is a string and returns
+;	a boolean indicating the result.
+(#inert string? (x))
+
+5.	Comparison and Boolean Algebra
+
+;	Returns #true if x and y are equal;
+;	otherwise, returns #false.
+(#inert equal? (x y))
+
+(#inert not? (x)
+	($if x #f #t))
+
+;	'x' is expected to be a list of
+;	booleans. Returns #true if they
+;	are all #true; otherwise, returns
+;	#false.
+;
+;	If x is #null returns #true.
+(#inert and? x)
+
+;	As 'and?' except it returns #false
+;	if all elements of 'x' are #false
+;	and #true if any of them are #true.
+;
+;	If x is #null returns #true.
+(#inert or? x)
+
+6.	Lists
+
+;	Creates a pair with 'x' as the head
+;	and 'y' as the tail.
+(#inert cons (x y))
+
+;	Returns the argument list.
+;	Arguments are evaluated
+;	before being passed to list.
+(#inert list x x)
+
+(#inert car (x) ($let (x . _) x x))
+
+(#inert cdr (x) ($let (_ . x) x x))
+
+;	Expands each element of the list 'x'.
+;	If the tail of the list is #null it is
+;	not expanded.
+(#inert expand-each x
+	($cond
+		((pair? x)
+			($let (head . tail)
+				(cons
+					(expand . head)
+					(expand-each . tail))))
+		((null? x) #null)
+		(#t (expand . x))))
+
+7.	Errors and Warnings
+
+;	Expects 'msg' to be a string.
+;	Prints 'msg' to console and aborts
+;	macro expansion.
+(#inert error (msg))
+
+(#inert assert (test msg)
+	($if test
+		#inert
+		(error msg))
+
+;	Expects 'msg' to be a string.
+;	Prints 'msg' to console and returns
+;	#inert.
+(#inert warn (msg))

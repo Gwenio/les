@@ -1,0 +1,13 @@
+
+($source ("" "src" "continuation" "type_check.les")
+	($macro "" "macro" "type_check.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (continuation?) ()))
+
+($source ("" "src" "continuation" "let_cc.les")
+	($macro "" "macro" "combiner.les")
+	($macro "" "macro" "simplify.les")
+	($import environment (make-environment assign!) ())
+	($import evaluation (sequence-aux) ())
+	($export continuation (call/cc) ())
+	($export kernel ($let/cc) ()))

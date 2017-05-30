@@ -1,0 +1,55 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	Internal
+;
+;	Details:
+;		Used by eval to lookup symbols in the environment.
+;		Lookup is depth first.
+($define lookup
+	($scope
+		;	Searches for the value associated with sym.
+		;	If found it is returned to the continuation ret.
+		;	If not found return normally to continue search in next parent.
+		($define search ($closure loop (ret sym . table)
+			($if (null? table)
+				#inert
+				($let ((x . y) . tail) table
+					($if (equal? sym x)
+						(apply ret . y)
+						(apply loop ret sym . tail))))))
+		;	Recursively searches parents as long as search returns normally.
+		($define decend ($closure loop (lookup ret sym . parents)
+			($if (null? parents)
+				#inert
+				($let (head . tail) parents
+					(apply lookup head sym . ret)
+					(apply loop lookup ret sym . tail)))))
+		;	Searches the table of env and then searches parents with decend.
+		;	Searching stops if a value is returned via continuation ret.
+		($define impl ($closure loop (env sym . ret)
+			($define (table . parents) ($unseal environment env))
+			($define table (get table))
+			(apply search ret sym . table)
+			(apply decend loop ret sym . parents)))
+		;	Prepares the success continuation, calls impl.
+		;	If impl returns normally rather than by the continuation
+		;	an error is generated to signal the lookup failed.
+		($closure loop (env . sym)
+			($let/cc ret
+				(apply impl (env sym . ret))
+				(error)))))

@@ -1,0 +1,81 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	Internal
+;
+;	Summary: Used to evaluate arguments to applicatives in eval.
+($define unwrap ($closure loop (env eval . args)
+	($if (pair? args)
+		($let (x . y) args
+			($define z (apply loop env eval . y))
+			(list (apply eval x . env) . z)
+		(apply eval args . env)))))
+
+;	Internal
+;
+;	Summary: Implementation for eval.
+($define impl ($closure loop (x . env)
+	($cond
+		((pair? x)
+			($let (op . tail) x
+				($cond
+					((symbol? op)
+						(apply loop (list (apply lookup env . op) . tail) . env))
+					((closure? op)
+						(apply op env . tail))
+					(($seal_type? applicative op)
+						($let args (apply unwrap env loop . tail)
+							(apply loop (list ($unseal applicative op) . args) . env)))
+					((pair? op)
+						(apply loop (list (apply loop op . env) . tail) . env))
+					(#t (error)))))
+		((symbol? x)
+			(call lookup env . x))
+		(#t x))))
+
+;	(eval expr env)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: The evaluation function.
+;
+;	Returns: The result of evaluation expr in env.
+;
+;	Parameters:
+;	expr	The expression to evaluate.
+;	env		The environment to evaluate expr in.
+;
+;	Details:
+;		.
+($define internal ($closure _ (x env)
+	($if ($seal_type? environment env)
+		(apply impl x . env)
+		(error))))
+
+;	Summary: Applicative for eval.
+($define applicative ($seal applicative
+	($closure _ (_ . x)
+		($if (pair? x)
+			($let (expr . x) x
+				($if (pair? x)
+					($let (env . x)
+						($if (null? x)
+							($if ($seal_type? environment env)
+								(apply impl expr . env)
+								(error))
+							(error)))
+					(error)))
+			(error)))))

@@ -1,0 +1,76 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	(null? . x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: Checks a list to see that all elements are #null.
+;
+;	Returns: #true or #false
+;
+;	Parameters:
+;	x	A list to check the elements of.
+;
+;	Details:
+;		If x is #null returns #true, if not a pair or #null returns #false.
+;		The cdr of the last pair in the list is ignored.
+($type-check null? _ aux (null? x)) x y)
+
+;	(pair? . x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: Checks a list to see that all elements are pairs.
+;
+;	Returns: #true or #false
+;
+;	Parameters:
+;	x	A list to check the elements of.
+;
+;	Details:
+;		If x is #null returns #true, if not a pair or #null returns #false.
+;		The cdr of the last pair in the list is ignored.
+($type-check pair? _ aux ((pair? x)) x y)
+
+;	(list? . x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: Checks a list to see that all elements are lists and x is a list.
+;
+;	Returns: #true or #false
+;
+;	Parameters:
+;	x	A list to check the elements of.
+;
+;	Details:
+;		If x is #null returns #true, if not a pair or #null returns #false.
+;		Returns #false if the cdr of the last pair in list x is not #null.
+($define list?
+	($scope
+		($define secondary ($closure loop x
+			($if (pair? x)
+				($let x (cdr x)
+					(apply loop . z))
+				(null? x))))
+		($define primary ($closure loop x
+			($if (pair? x)
+				($let (x . y) x
+					($if (apply secondary)
+						(apply loop . z)
+						#f)
+				(null? x))))
+		($seal applicative ($closure _ (_ . x)
+			(apply primary . x)))))

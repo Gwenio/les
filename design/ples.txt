@@ -1,0 +1,812 @@
+
+Table of Contents:
+	I	Overview
+	II	PLES
+		1.	Conventions
+			A.	Instruction Specifications
+			B.	Parameter Trees
+		2.	Forms
+		3.	Types
+		4.	Invocations
+	III	ALES
+		1.	About
+		2.	Compile
+		3.	Execute
+
+
+
+I	Overview
+
+	PLES (Primative LES) is a simple language created to define the reference
+LES interpreter. The primary objective of PLES is to be simple to compile and
+optimize. As a consequence it is not a convenient language to work with, hence
+the macro system described in 'macro.txt'.
+
+	The instruction set of PLES is very small and mostly deals with control
+flow and manipulation of the environment. Most other functionality is placed
+in the $invoke instruction. Under this model simple interpreters and compilers
+for PLES can map $invoke to a call of a predefined routine rather than needing
+to decode a large number of special purpose instructions representing the
+various primitive operations.
+
+	On key element to the design of PLES is that environments are immutable.
+When values are assigned to a symbol a new environment is created with the
+binding that has the previous as a parent. Thus environmental lookups can
+be mapped to an address. The address could be a global constant in the
+program's data, a index into the stack, or even a CPU register. On the other
+hand, this makes it impossible for closures to have the environment they
+will be bound to a symbol in. As a result a work around was provided for
+functions to recursively call themselves, but mutual recursion is troublesome.
+
+	In addition to PLES, an additional language ALES is defined as the
+instruction set of a theoretical virtual machine to demonstrate the semantics
+of PLES.
+
+	As to why a new language was designed for the reference LES interpreter
+rather than using an existing one, there are two reasons. One is that finding
+a language that supports first class continuations, first class closures,
+tail recursion, garbage collection, and N:M threading without needing extra
+effort is difficult. Second is PLES provides a convenient code generation
+target for compiling DSL that use LES as an interpreter.
+
+
+II	PLES
+
+1.	Conventions
+
+A.	Instruction Specifications
+
+	The forms used by PLES and invocations will have a descriptor written as:
+
+(name . capture)
+
+	Where 'name' is the symbol at the start of a form or the operation
+identifier for an invocation. 'capture' is a list naming the values
+expected to be in the form or the parameters an invocation expects.
+It can also be omitted indicating an invocation that receives no
+arguments.
+
+	'capture' follows the convention for parameter trees described next.
+
+
+B.	Parameter Trees
+
+	A parameter tree is a list containing symbols, #ignore, #null, and
+lists containing the same items. It can also be a single one of those
+items that is not in a list in which case the whole set of values
+the tree is matched to will be handled at once.
+
+The rules for the matching are as follows:
+
+-	Let the parameter tree be K and the value set it is matched with
+	be V.
+
+-	If K is a pair, then V must be a pair. The head and tail of K
+	will be matched against the head and tail of V respectively.
+
+-	If K is #null, then V must also be #null. If not then it is
+	an error.
+
+-	If K is #ignore, then V is discarded.
+
+-	If K is a symbol, then the value assigned to K is V. By
+	'assigned' this means new environment is created with this
+	binding present. It can also mean formal name of an input
+	for a form or invocation when their specification is given.
+
+
+2.	Forms
+
+($quote expression)
+
+	$quote wraps expressions that should not be evaluated. This includes lists,
+symbols, and literals. Literals should always be in $quote even though they do
+not get evaluated any ways to make it easy for them to be categorized as such.
+
+	The main use of $quote is for some $invoke operations that want symbols
+in their argument list.
+
+($lookup sym)
+
+	$lookup requires 'sym' to be a symbol. When evaluated $lookup searches
+the current environment for the value bound to the symbol and returns the
+most recent one. There must be a value bound to the symbol.
+
+($scope body)
+
+	$scope saves the current environment before body is evaluated, and then
+restores it after body has been executed.
+
+($define keys values)
+
+	$define assigns values to keys using the matching method for parameter
+trees defined earlier. The return value is undefined, and it is expected
+that code will be written so that anything that would recieve the result
+of $define gets #inert instead as is done in the 'simplify' macro set.
+
+($let keys values body)
+
+	$let is like $scope with ($define keys values) inside, except that values
+is evaluated before the current environment is saved. The assignment is made
+after the current environment is saved. 'body' is evaluated after the
+assignment occurs and then the previous environment is restored.
+
+($sequence . body)
+
+	$sequence expects body to be a list that ends with #null and contains
+at least two elements before that. Each element is treated as an expression
+to evaluate and they are evaluated in head to tail order. $sequence returns
+the value of the last expression in the list.
+
+($if test x y)
+
+	$if provides conditional branching. 'test' must be an expression that
+evaluates to a boolean. If 'test' is #true then 'x' will be evaluated;
+otherwise, if it is #false then 'y' will be evaluated. After the selected
+branch is evaluated the execution joins up at the next instruction after
+the $if.
+
+($invoke op args)
+
+	$invoke requires 'op' to be a symbol indication an invocation to preform
+with the provided 'args'. 'args' must evaluate to #null or a list with #null
+at the tail. Compilers may choose to optimize the trailing #null out if they
+do not need it for their implementation of the invocation, and they can
+reliably expect it to exist.
+
+($closure parameters body)
+
+	$closure packages the code in 'body' with a saved version of the current
+environment. When called with apply, the arguments passed will be assigned to
+'parameters' following the matching method for parameter trees.
+
+	'parameters' is expected to always be a pair. The head must contain a
+symbol that can be used to refer to the closure in order to recursively
+call itself or #ignore if it is not recursive. The tail is the normal
+parameters that will be passed to apply.
+
+	Returns the created closure.
+
+($let/cc cc body)
+
+	$let/cc requires 'cc' to be a symbol. It saves the current environment
+and assigns a continuation to 'cc'. A continuation is a closure that
+overwrites the call frame with either the one that was current when
+$let/cc created it if it was in a tail context or a frame that $let/cc
+created for it because it was not in a tail context.
+
+	$let/cc returns the value body evaluates to and/or the argument
+list passed to it via apply. $let/cc will return values every time
+the continuation it created is passed to apply, and the continuation
+must be valid until it is garbage collected.
+
+(apply op args)
+
+	'apply' requires 'op' to evaluate to a closure. Remember that the
+continuations created by $let/cc are also considered closures. The result
+of evaluating 'args' is passed to the closure.
+
+	If 'apply' is not called in a tail context then it must create a new
+call frame with the next instruction to be executed as the return address.
+If it is in a tail context no frame should be created so that the closure
+will return to the address the current function would have directly rather
+that returning an extra time.
+
+(cons head tail)
+
+	'cons' creates a pair with 'head' as the head and 'tail' as the tail.
+It then returns the pair. The reason this is not placed in $invoke is
+because 'cons' is used to build the argument list passed to $invoke if
+the list is not a constant value.
+
+
+3.	Types
+
+-	inert
+
+	The inert type has one value: the literal #inert. It is used to
+stand for a return value that has no meaning.
+
+-	ignore
+
+	The ignore type has one value: the literal #ignore. It is used
+to indicate that a parameter is not needed.
+
+-	null
+
+	The null type has one value: the literal #null. It is used
+to indicate an empty list or a zero element tuple. Objects of
+type null also get a result of #true when checked for type
+tuple.
+
+-	symbol
+
+	A type for use as keys for environmental lookups. Unlike some other
+Lisp dialects, PLES and LES symbols that are considered equal do not
+have to have the same address, though they can be implemented that
+way to speed up equality checks between symbols.
+
+-	pair
+
+	A tuple of two elements that is used to form linked lists. It is
+used as the evaluation structure of LES and therefore must not be
+considered a tuple for type checks and tuples of two elements not
+be considered pairs. So pairs and two element tuples are distinct
+for type checks.
+
+-	closure
+
+	A type used for functions with a stored environment and
+continuations. PLES does not distinguish between them. LES
+wraps continuations in a capsule with other data to make them
+play nice with exception handling.
+
+-	boolean
+
+	The type of literal #true and #false.
+
+-	pid
+
+	A process identifier.
+
+-	monitor
+
+	A type for the reference to a monitor hook for a process
+watching for another to exit.
+
+-	timer
+
+	A type for the object reference for the timer on a delayed
+message send.
+
+-	string
+
+	An object containing UTF-8 text.
+
+-	blob
+
+	An object containing unformatted binary data.
+
+
+4.	Invocations
+
+TODO
+
+
+III	ALES
+
+1.	About
+
+	ALES (Assembly LES) is not a formal language, but is provides as a basis
+for demonstrating the compilation and execution of PLES other than the details
+of invocations.
+
+	It is drawn from an early compiler and virtual machine for PLES that was
+written in Elixir. Though the execution section describes the processing of
+a list of ALES instruction in Prolog and the Compile section uses macros
+to transform PLES into ALES.
+
+	The code for both is commented and not quite complete. Note that the
+Execute code uses some LES literals directly (#inert, #ignore, #true, and
+#false). A real compiler for PLES would either need additional support for
+code from different sources to be linked that is not present in the sample.
+As for the sample virtual machine, besides not having a way to load code
+it also lacks the implementation for its invoke rule.
+
+The code related to ALES in this document is under the following license:
+
+ISC License (ISC)
+
+Copyright 2017 Adam Armstrong
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted, provided that the above copyright
+notice and this permission notice appear in all copies.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+
+2.	Compile
+
+;	Summary of forms:
+;
+;	($quote expression)
+;	($scope body)
+;	($let keys values body)
+;	($lookup sym)
+;	($define keys values)
+;	($sequence . body)
+;	($if test x y)
+;	($invoke op args)
+;	($closure parameters body)
+;	($let/cc cc body)
+;	(apply op args)
+;	(cons head tail)
+
+;	Expands body as a $sequence with.
+(() body
+	($if (null? body)
+		(error "Empty file.")
+		(list (expand $sequence (return) . body))))
+
+;	S-expressions that do not follow the form of a macro are invalid.
+(_ _expression (error "Invalid expression."))
+
+;	Inserts the next step of execution between the form and its body.
+(#inert insert (next (form . body))
+	(expand form next . body))
+
+;	Expands to the operations for returning from a function call.
+(#inert return ()
+	(cons frame-exit stack-cons . jump))
+
+;	Place a literal into the accumulator.
+(#inert $data (expr . next)
+	(list constant data expr . next))
+
+;	Place a code segment in the accumulator.
+(#inert $code (expr . next)
+	(list constant code expr . next))
+
+;	Literal expression, load it into the accumulator.
+($quote quote-form (next expr)
+	($data expr . next))
+
+;	Save environment to the stack, execute expr, swap accumulator
+;	with saved environment, restore saved environment, pop the
+;	value of accumulator from the stack that we temporary stored.
+;
+;	None of this occurs in a tail context.
+(#inert scope-wrap (copy? next body)
+	($if (equal? next (return))
+		(insert next body)
+		($let next (cons stack-push
+			(insert (list stack-swap env-swap stack-pop . next) body))
+			($if copy?
+				(cons env-copy next)
+				next))))
+
+;	If in a tail context this is does nothing but expand body.
+;
+;	Otherwise, saves the current environment, executes body,
+;	and then restores the environment.
+($scope scope-form (next body)
+	(scope-wrap #true next body))
+
+;	If in a tail context this is is equivalent to
+;	($sequence ($define keys values) body)
+;
+;	Otherwise $define keys to values, save old environment
+;	to the stack, execute body, and then restore the environment.
+($let let-form (next keys values body)
+	($define next (scope-wrap #false next body))
+	(insert (list env-assign keys . next) values)
+
+;	Evaluate each sub expression in order.
+($sequence seq-form (next head . tail)
+	($if (null? tail)
+		(insert next head)
+		(insert (expand $sequence next . tail) head)))
+
+;	Lookup the assigned value of a symbol in the current environment
+;	and store it in accumulator.
+($lookup look-form (next sym)
+	(assert (symbol? sym)
+		"(lookup sym) requires sym to be a symbol.")
+	(list env-lookup sym . next))
+
+;	Assign values to a set of symbols in the current environment.
+;	The values come from the accumulator.
+($define def-form (next keys values)
+	(insert (list env-assign keys . next) values))
+
+;	Conditional branch.
+($if if-form (next test x y)
+	($if (equal? next (return))
+		(insert (list branch (insert next x) (insert next y)) test)
+		($sequence
+			($define z (cons stack-cons jump))
+			($define z
+				(insert (list branch (insert z x) (insert z y)) test))
+			($code next stack-push . z))))
+
+;	Represents an invocation of a specialized operation.
+($invoke _ (next op args)
+	(assert (symbol? op)
+		"Invoke requires the operation to be a symbol.")
+	(insert (list invoke op . next) args))
+
+;	Creates a closure.
+;	When frame-select operates on the result of frame-closure,
+;	the stack will contain the address of body followed by
+;	the closure itself.
+;
+;	After being selected the address of body is removed
+;	to jump to body.
+;
+;	So to get the value for loop a stack-cons is placed
+;	at the start of body to place the closure at the start
+;	of the argument list.
+;
+;	Next the the body is an env-assign to assign the arguments
+;	to their parameter names.
+;
+;	Body ends with a return.
+($closure _ (next parameters body)
+	($define body (insert (return) body))
+	($define body (list stack-cons env-assign parameters . body))
+	($code body frame-closure . next))
+
+;	If not in a tail context, enter a new frame with
+;	next as the return address on top of the stack.
+($let/cc _ (next cc body)
+	(assert (symbol? cc)
+		"$let/cc requires the continuation name to be a symbol.")
+	($define call (insert (return) body))
+	($define call (list frame-continuation env-assign cc . call))
+	($if (equal? next (return))
+		call
+		($code next frame-enter . call)))
+
+;	If not in a tail context, enter a new frame with
+;	next as the return address on top of the stack.
+(apply apply-call (next op arg)
+	($define call (insert
+		(cons
+			frame-select
+			(insert (return) arg))
+		op)))
+	($if (equal? next (return))
+		call
+		($code next frame-enter . call)))
+
+;	x push y cons next
+(cons cons-call (next x y)
+	(insert (cons stack-push (insert (cons stack-cons next) y)) x))
+
+
+3.	Execute
+
+;	The interpreter described hear represents the state
+;	of execution as a list [A, E, F, S | X].
+;
+;	A is the accumulator. It can be considered as
+;	a general purpose register containing the result
+;	of the last operation.
+;
+;	E is the current environment. It can be considered
+;	as a known position on the stack in the current call
+;	frame or as being a general register assigned to this
+;	purpose.
+;
+;	F is the previous call frame. It can be considered
+;	as a known position on the stack in the current call
+;	frame or as being a general register assigned to this
+;	purpose.
+;
+;	S is the top of the stack, equivalent to the stack
+;	in a physical computer.
+;
+;	X is the list of instruction, which is equivalent
+;	to the execution register on a CPU.
+
+
+;	Summary of instructions:
+;
+;	env-lookup
+;	env-assign
+;	env-swap
+;	env-copy
+;	frame-enter
+;	frame-exit
+;	frame-continuation
+;	frame-closure
+;	frame-select
+;	stack-pop
+;	stack-push
+;	stack-swap
+;	stack-cons
+;	constant
+;	invoke
+;	branch
+;	jump
+;
+;	Also while not in the step rules, the start
+;	rule uses an instruction 'exit' to define the
+;	exit state.
+
+
+;	A place holder for built-in functions.
+;
+;	The variables are the operation, the input,
+;	and the output in that order.
+;
+;	The operations used in the definition of others
+;	are seal, unseal, and type?.
+;
+;	The input for all is a list in the form of [type, obj]
+;	where type is a symbol and obj is a piece of data.
+;
+;	Seal hides a piece of data as a type specified.
+;
+;	Unseal reverse seal if the type it is given to expect
+;	was the one the data was sealed as.
+;
+;	Type? checks a data for a matching type, output
+;	is #true or #false.
+;
+;	Internal invokes have #null at the end of the argument
+;	list to match code generated by the simplify macros.
+invoke(_, _, _).
+
+
+;	If the head of E is a list where the head
+;	is K, the tail of the list is V.
+lookup(E, K, V) :-
+	E = [H | _],
+	H = [K | V].
+
+;	Otherwise, continue searching the tail of E.
+lookup(E, K, V) :-
+	E = [_ | T],
+	lookup(T, K, V).
+
+
+;	If the key is #ignore, no change is made
+;	and the value is ignored.
+assign(E, #ignore, _, E).
+
+;	If the key is #null then the value must be #null.
+;	E is unchanged.
+assign(E, [], [], E) .
+
+;	If K is a list, V must be a list.
+;	Assign the head of V to the head of K and
+;	assign the tail of V to the tail of K.
+assign(E0, K, V, E3) :-
+	K = [K0 | K1],
+	V = [V0 | V1],
+	assign(E0, K0, V0, E1),
+	assign(E1, K1, V1, E2).
+
+;	Finally, if tail is a symbol place a list
+;	[K | V] at the head of E0 to form E1.
+assign(E0, K, V, E1) :-
+	invoke(type?, [symbol, K], #true),
+	[[K | V] | E0] = E1.
+
+
+;	[env-lookup K | X]
+;
+;	Searches the current environment for a symbol
+;	following it in the instruction list.
+;
+;	If found places the value assigned to the symbol
+;	in the accumulator.
+step(C, N) :-
+	C = [_, E, F, S, env-lookup, R0 | X],
+	lookup(E, R0, A),
+	[A, E, F, S | X] = N.
+
+;	[env-assign K | X]
+;
+;	Assigns the value in the accumulator to the keys
+;	that follow it in the instruction list.
+;
+;	The new environment is now the current one,
+;	and the previous is placed in accumulator.
+step(C, N) :-
+	C = [R0, A, F, S, env-assign, R2 | X],
+	assign(A, R2, R0, E),
+	[A, E, F, S | X] = N.
+
+;	[env-copy | X]
+;
+;	Places the current environment in the accumulator.
+step(C, N) :-
+	C = [_, E, F, S, env-copy | X],
+	E = A,
+	[A, E, F, S | X] = N.
+
+;	[env-swap | X]
+;
+;	Swaps accumulator and current environment.
+step(C, N) :-
+	C = [E, A, F, S, env-swap | X],
+	[A, E, F, S | X] = N.
+
+;	[frame-enter | X]
+;
+;	Stores current environment, frame, and stack
+;	in a new frame that is made into the current.
+;
+;	The value in the accumulator is placed on top
+;	of the stored stack on the assumsion it is the
+;	return address.
+;
+;	The stack is set to #null representing the fact
+;	that the portion of the stack in the previous
+;	call frame will not be used until the new one
+;	exits.
+step(C, N) :-
+	C = [R0, E, R1, R2, frame-enter | X],
+	F = [E, R1, R0 | R2],
+	[] =  S,
+	[A, E, F, S | X] = N.
+
+;	[frame-exit | X]
+;
+;	Unpacks the current frame, replacing
+;	the current environment, frame, and stack
+;	with the contents.
+step(C, N) :-
+	C = [A, _, R0, _, frame-exit | X],
+	R0 = [E, F | S],
+	[A, E, F, S | X] = N.
+
+;	[frame-continuation | X]
+;
+;	Seals the current frame as type closure
+;	and places the sealed object in the accumulator.
+step(C, N) :-
+	C = [_, E, F, S, frame-continuation | X],
+	invoke(seal, [closure, F], A),
+	[A, E, F, S | X] = N.
+
+;	[frame-closure | X]
+;
+;	Seals a list of the current environment
+;	and the current accumulator value as a closure.
+;
+;	Places the result in the accumulator.
+;
+;	The initial accumulator is expected to be
+;	the address of code to jump to.
+;
+;	Is a list of two elements while a closure
+;	from frame-continuation is at least three.
+step(C, N) :-
+	C = [R0, E, F, S, frame-closure, R1 | X],
+	invoke(seal, [closure, [E, R0]], A),
+	[A, E, F, S | X] = N.
+
+;	[frame-select | X]
+;
+;	Takes a closure object and constructs
+;	a new value to use as the current frame.
+;
+;	How this is done depends on whether the closure
+;	came from frame-continuation or frame-closure.
+;
+;	Those from frame-continuation simply
+;	set the current frame to the unsealed value.
+;
+;	Ones from frame-closure construct an new
+;	frame. The values from the closure are used
+;	as the environment and the top of the stack
+;	in the new frame. The current frame is used
+;	as the previous. The closure is placed
+;	second in the frame's stack.
+step(C, N) :-
+	C = [A, E, R0, S, frame-select | X],
+	invoke(unseal, [closure, A], [R1, R2]),
+	[R1, R0, R2, A] = F
+	[A, E, F, S | X] = N.
+
+step(C, N) :-
+	C = [A, E, _, S, frame-select | X],
+	invoke(unseal, [closure, A], F),
+	[A, E, F, S | X] = N.
+
+;	[stack-pop | X]
+;
+;	Sets the accumulator to the value on top of the stack,
+;	and removes the head of the stack.
+step(C, N) :-
+	C = [_, E, F, R0, stack-pop | X],
+	R0 = [A | S],
+	[A, E, F, S | X] = N.
+
+;	[stack-push | X]
+;
+;	Places a copy of the accumulator on top of the stack.
+step(C, N) :-
+	C = [A, E, F, R0, stack-push | X],
+	[A | R0] = S,
+	[A, E, F, S | X] = N.
+
+;	[stack-swap | X]
+;
+;	Swaps the accumulator and the head of the stack.
+step(C, N) :-
+	C = [R0, E, F, R1, stack-swap | X],
+	R1 = [A | R2], 
+	S = [R0 | R2],
+	[A, E, F, S | X] = N.
+
+;	[stack-cons | X]
+;
+;	Makes a list in the accumulator with the previous
+;	value as the tail and the top of the stack as the head.
+;
+;	Removes the value from the top of the stack.
+step(C, N) :-
+	C = [R0, E, F, R1, stack-cons | X],
+	R1 = [R2 | S],
+	A = [R2 | R0], 
+	[A, E, F, S | X] = N.
+
+;	[constant _ V | X]
+;
+;	Is followed by two values in the instruction list.
+;
+;	The first identifies the type of constant, currently
+;	is data or code.
+;
+;	The second is a literal value to place in the accumulator.
+step(C, N) :-
+	C = [_, E, F, S, constant, _, A | X],
+	[A, E, F, S | X] = N.
+
+;	[invoke OP | X]
+;
+;	Followed by the operation to invoke.
+;
+;	Takes the accumulator as input and
+;	replaces it with the output.
+step(C, N) :-
+	C = [R0, E, F, S, invoke, R1 | X],
+	invoke(R1, R0, A),
+	[A, E, F, S | X] = N.
+
+;	[branch X Y]
+;
+;	Followed by two list of instructions.
+;
+;	The first is used if the accumulator contains #true
+;	and the second if it contains #false.
+step(C, N) :-
+	A = #true,
+	C = [A, E, F, S, branch, X, _]),
+	[A, E, F, S | X] = N.
+
+step(C, N) :-
+	A = #false,
+	C = [A, E, F, S, branch, _, X]),
+	[A, E, F, S | X] = N.
+
+;	jump
+;
+;	The accumulator should contain a list.
+;
+;	The head is removed and used as the new instruction list.
+step(C, N) :-
+	C = [R0, E, F, S | jump],
+	R0 = [X | A],
+	[A, E, F, S | X] = N.
+
+
+;	Step the current state to next, complete if
+;	it matches the exit state.
+execute(S0, SN) :- step(S0, S1), S1 = SN.
+
+;	Otherwise step again.
+execute(S0, SN) :- step(S0, S1), execute(S1, SN).
+
+
+;	X is the initial instruction list.
+;	A is the final accumulator value.
+;	E is the final environment.
+;
+;	Executes the instructions.
+start(X, A, E) :-
+	[#inert, [], [[], [], exit], [] | X] = S0,
+	[A, E, [], [] | exit] = SN,
+	execute(S0, SN).
+

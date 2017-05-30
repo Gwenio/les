@@ -1,0 +1,67 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	(wrap x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: Wraps a combiner as an applicative.
+;
+;	Returns: An applicative.
+;
+;	Parameters:
+;	x	The combiner to wrap as an applicative.
+;
+;	Details:
+;		If x is already an applicative, another layer is added.
+;		This causes arguments to the resulting applicative to be
+;		evaluated an additional time before being passed to
+;		the underlying operative.
+($define wrap ($seal applicative ($closure _ (_ . x)
+	($if (pair? x)
+		($let (x . y) x
+			($if (null? y)
+				($cond
+					((closure? x)
+						($seal applicative x))
+					(($seal_type? applicative x)
+						($seal applicative x))
+					(#t (error)))
+				(error)))
+		(error)))))
+
+;	(unwrap x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: Gets the combiner from an applicative.
+;
+;	Returns: The underlying combiner.
+;
+;	Parameters:
+;	x	The applicative to retrieve the underlying combiner from.
+;
+;	Details:
+;		The result may be either an operative or an applicative.
+;		The parameter x must be an applicative.
+($define unwrap ($seal applicative ($closure _ (_ . x)
+	($if (pair? x)
+		($let (x . y) x
+			($if (null? y)
+				($if ($seal_type? applicative x)
+					($unseal applicative x)
+					(error))
+				(error)))
+		(error)))))

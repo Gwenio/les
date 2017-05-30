@@ -1,0 +1,77 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	Builds the new table.
+($define reconstruct ($closure loop (e . x)
+	($if (pair? x)
+		($let (head . tail) x
+			(apply loop (list head . e) . tail)
+		e))
+
+;	Takes updated keys out of the table.
+($define replace ($closure loop (x y k v . e)
+	($if (pair? e)
+		($let (head . tail) e
+			($if (equal? k (car head))
+				($let z (list (list k . v) . y)
+					(apply reconstruct tail . z))
+				(apply loop x (list head . y) k v . tail)))
+		(list (list k . v) . x))))
+
+;	Check if a symbol has been used previously.
+($define used? ($closure loop (k . u)
+	($if (pair? u)
+		($let (head . tail) u
+			($if (equal? k head)
+				#t
+				(apply loop k . tail)))
+		#f)))
+
+;	Matches keys to values.
+($define match ($closure loop (e u k . v)
+	($cond
+		((symbol? k)
+			($if (apply used? k . u)
+				($let u (list k . u)
+					(list (apply replace e k v . e) . u))
+				(error)))
+		((ignore? k)
+			(list e . u))
+		((null? k)
+			($if (null? v)
+				(list e . u)
+				(error)))
+		((pair? k)
+			($if (pair? v)
+				($sequence
+					($define (k1 . k2) k)
+					($define (v1 . v2) v)
+					($define (e . u) (apply loop e u k1 . v1))
+					(apply loop e u k2 . v2))
+				(error)))
+			(#t (error)))))
+
+;	Internal
+;
+;	Summary: Assigns values to symbolic keys in an environment.
+;
+;	Returns: #inert
+($define assign! ($closure _ (env keys values)
+	($define (e . _) ($unseal environment env))
+	(update e _ table ($let (env . _)
+		(apply match table () keys . values)
+		(list env . #inert)))))

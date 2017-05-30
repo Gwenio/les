@@ -1,0 +1,79 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	Defines a macro for the typical type check function.
+;	Creates both a closure for internal use and an applicative
+;	to export to LES.
+;	It is expected that this will be applied before "simplify.les".
+
+;	Unrolls then various checks and builds
+;	a sequence of $if expressions to check them.
+(#inert $check (loop var (test . tail))
+	(list $if test
+		(list apply loop . var)
+		($if (null? tail)
+			#f
+			($checks loop var tail))))
+
+;	Generates the body for the internal and applicative
+;	version of the type check.
+(#inert $thunk (aux x)
+	(list $if (list pair? x)
+		(list apply aux . x)
+		(list null? x)))
+
+;	Creates a type checking function.
+;	This function interates through a list of items checking
+;	until all pass or one fails.
+;
+;	app is the name to give the applicative or #ignore to not generate it.
+;	intern is the name to get the internal closure or #ignore to not generate it.
+;	aux is the name of a helper function generated along side the applicative
+;		and the internal closure.
+;	checks is a list of expressions each of which is a check to apply.
+;	x is a variable name for internal use. The object to check will
+;		be bound to this when each check expression is evaluated.
+;	y is another variable name for internal use.
+;
+;	At least one of app or intern must be a symbol.
+($type-check _ (app intern aux checks x y)
+	(assert (or? (symbol? app) (symbol? intern))
+		"$type-check requires a symbol to name an applicative or an internal closure.")
+	(assert (symbol? aux)
+		"$type-check requires a symbol to name the auxiliary function.")
+	(assert (symbol? x y)
+		"$type-check requires a symbol for both variable x and y.")
+	(list $sequence
+		(list $define aux
+			(list $closure aux x
+				(list $if (list pair? x)
+					(list $let (list x . y) x
+						($check aux y checks))
+					#t))
+		($cond
+			((ignore? intern) (list $define (list intern app) (list list
+					(list $closure _ x ($thunk aux x))
+					(list $seal applicative
+						(list $closure _ (list _ . x) ($thunk aux x))))))
+			((ignore? app)
+				(list $define intern
+					(list $closure _ x ($thunk aux x))))
+			(#t
+				(list $define (list intern app) (list list
+					(list $closure _ x ($thunk aux x))
+					(list $seal applicative
+						(list $closure _ (list _ . x) ($thunk aux x))))))))

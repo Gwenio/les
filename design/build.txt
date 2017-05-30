@@ -1,0 +1,237 @@
+
+Table of Contents:
+	I	 Build file format
+		1.	Overview
+		2.	File Paths
+		3.	Exports, Imports, and Modules
+		4.	Forms
+	II	Linking
+		1.	Important Note
+		2.	$data, $text, and $blob
+		3.	$source
+		4.	$program
+
+
+
+I	Build File Format
+
+1.	Overview
+
+	Build files also serve as project specification. They provide a high level
+description of how to build the project rather than a detailed set of specific
+steps to follow. The intent is that they will be used to generate such a file
+that can then be processed by a robust build tool such as Ninja that will
+ensure all files that need to be rebuilt will be and those that do not will
+be reused.
+
+	The build files are mostly aimed at PLES which is a compiled language,
+though they could still be used for LES programs with multiple source files
+when no using a self contained development environment similar to Smalltalk.
+
+
+2.	File Paths
+
+	File paths are written as a list of strings that will be concatenated with
+the appropriated separator character for the system.
+
+	Unless stated otherwise or changed by an option in the tool processing the
+build file, file paths are to be assumed to be relative to the folder that
+contains the build file.
+
+	Empty strings at the start of a list are treated as indicating to move
+up the parent directory.
+
+Example: ("" "foo" "bar.les")
+
+	Files in the current folder may be named with a string rather than a list.
+
+
+3. Exports, Imports, and Modules
+
+	Exports and imports are tied to modules which act as namespaces for
+symbols. Modules are global through all link files being used for building
+a program.
+
+	The symbols exports are bound to can only be set once per module.
+Multiple imports with the same symbol can be used in a source as long as
+aliases are provided so that each has a unique name.
+
+
+4.	Forms
+
+	The following forms will be given with the symbol expected at the start
+of expressions following the form and followed by symbols used to name the
+parameters the form expects. A symbol in the tail position (following a '.')
+indicate a list of unspecified length containing sub forms is expected.
+
+($require path)
+
+	$require causes another build file to be included in a project definition.
+Each build file will be processed only one time. After that $require clauses
+specifying it will be ignored.
+
+	'path' is a path for the build file to be included.
+
+($program output path . spec)
+
+	The $program form specifies an output target. Each output will only have
+one $program. Other files will be merged during linking bases on $imports
+defined in the program specification.
+
+	'output' is a path for the output file. The output path is relative to
+the output directory if one is set in the linker options.
+
+	'path' is a path for the source file.
+
+	'spec' is a list of $import and $macro clauses.
+
+($source path . spec)
+
+	The $source form specifies in input file to be linked with a $program.
+
+	Path is a path for the source file.
+
+	Spec is a list of $import, $export, and $macro clauses.
+
+($data module name path . spec)
+
+	$data specifies a file to be loaded as data and bound to a symbol. The
+content is not treated as code. Data files are subject to macro expansion
+if any $macro files are specified in spec.
+
+	'module' is a symbol for the module the data structure should be bound to.
+
+	'name' is the symbol to bind the content to within the module.
+
+	'path' is a path for the data file.
+
+	'spec' is a list of $macro clauses.
+
+($text module name path)
+
+	$text causes a file to be used as a string literal. The file should be
+UTF-8 encoded, preferably without a byte order mark. No escape sequences are
+used for the text, it is taken as is.
+
+	'module' is a symbol for the module the data structure should be bound to.
+
+	'name' is the symbol to bind the content to within the module.
+
+	'path' is a path for the text file.
+
+($blob module name path)
+
+	$blob is like $text, except its data is imported as a blob of bytes that
+do not conform to any particular format.
+
+	'module' is a symbol for the module the data structure should be bound to.
+
+	'name' is the symbol to bind the content to within the module.
+
+	'path' is a path for the blob file.
+
+($macro . path)
+
+	$macro clauses specify a file in MLES format to use to transform a
+$program, $source, or a $data file before compiling. Macro files are applied
+in the order they appear in the specification of the file they modify.
+
+	'path' is a path for the macro file. As the only parameter it does not
+need a set of parentheses unlike paths in other forms.
+
+($export module names aliases)
+
+	$export specifies symbols to be exported from a $source to a module.
+
+	'module' is a symbol for the module the exports should be bound in.
+
+	'names' is a list of symbols to export from the final environment of the
+$source.
+
+	'aliases' is a list of symbols and #ignore that renames the exported
+symbols. For each symbol in this list the corresponding object from list names
+will be bound to the alias symbol in the module. #ignore skips the renaming of
+a symbol and it will be bound to the symbol from names in the module. If
+aliases is shorter than names all symbols in names without an alias will be
+treated as having #ignore as an alias.
+
+($import module names aliases)
+
+	$import specifies symbols to be imported to a $source or $program from a
+module.
+
+	'module' is a symbol for the module the imports are extracted from.
+
+	'names' is a list of symbols to export from the module to import.
+
+	'aliases' is a list of symbols and #ignore that renames the imported
+objects. For each symbol in this list the corresponding object from list names
+will be bound in the initial environment of the code under the symbol from
+aliases. #ignore skips the renaming of a symbol and it will be bound to the
+symbol from names. If aliases is shorter than names all symbols in names
+without an alias will be treated as having #ignore as an alias.
+
+
+II	Linking
+
+1.	Important Note
+
+	The following is written for compiling to ALES, when compiling to other
+formats the steps may differ but the goal would be to achieve similar
+semantics. For compiling PLES to ALES linking needs to occur before or
+simultaneously with compiling.
+
+
+2.	$data, $text, and $blob
+
+	As $data, $text, and $blob do not have imports to depend on, they should
+be linked first. They are quite simple, place them in a $quote as the value
+for the $define where the key is a symbol that will be unique amongst exports.
+A simple way to make such a symbol is to concatenate the module and export
+symbol separated by an underscore. Then append the length of the module or
+export symbol to the end, again separated by an underscore.
+
+
+3.	$source
+
+	Sources would need to be sorted so that each will have its exports defined
+before other sources that need them. Circular dependencies should be detected
+and cause linking to fail.
+
+	First, at the end of steps in the PLES source a series of 'cons'
+and '$lookup' operations would be appended to end of the PLES code to build
+a list containing the values associated with the exported symbol from the
+final environment.
+
+	The code should be executed in a scope where only the imports are defined,
+but failing that it can be run in a scope where the symbols holding previous
+exports are defined. The latter is more likely to introduce subtle errors.
+
+	Using PLES directly only the inferior method is easy. Add a $define at
+the start of the code that maps the imported symbols to their aliases. Then
+insert the code into a $sequence, and that inside a $scope. The result of the
+$scope is then used for the value of a $define that assigns the exported
+values to the unique symbols assigned to them.
+
+So:
+
+($define export_aliases
+	($scope ($sequence
+		($define import_aliases imports)
+		($sequence . source_code)
+		(list . exports)))))
+
+
+4.	$program
+
+	The program should always be placed last in the merged output as it does
+not export any symbols for other sources to depend on.
+
+	Ideally a list of the values for the imported symbols would be constructed,
+the environment would be set to a blank one, the imports would be assigned to
+their aliases in the environment, and then the code from the $program source
+would be executed.
+
+	If using just PLES a blank environment can be achieved by wrapping all the
+code that sets up exports in a $scope and having the list be returned from it.
+

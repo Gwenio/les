@@ -1,0 +1,83 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	($if test x y)
+;	Operative - captures current environment.
+;
+;	Summary: Provides basic conditional evaluation.
+;
+;	Returns: The result of evaluating x if test is #true,
+;			otherwise if test is #false returns the result
+;			of evaluating y.
+;
+;	Parameters:
+;	test	A boolean indicating the branch to take.
+;	x		Expression to evaluate if test is #true.
+;	y		Expression to evaluate if test is #false.
+;
+;	Details:
+;		Raises an error if test is not a boolean.
+($define $if ($closure _ (env . z)
+	($if (pair? z)
+		($let (test . z) z
+			($if (pair? z)
+				($let (x . z) z
+					($if (pair? z)
+						($let (t . z) z
+							($if (null? z)
+								($sequence
+									($define test (apply eval test env))
+									($if (boolean? test)
+										(apply eval ($if test x y) env)
+										(error)))
+								(error)))
+						(error)))
+				(error)))
+		(error))))
+
+;	($cond . clauses)
+;	Operative - captures current environment.
+;
+;	Summary: Advanced branching of evaluation.
+;
+;	Returns: The result of evaluating the clause with the first
+;		filter to evaluate to #true.
+;
+;	Parameters:
+;	clauses	A list where the the car of each pair is a pair.
+;			The car of said pair will be evaluated, and if
+;			it evaluates to #true then the cdr will be evaluated.
+;
+;	Details:
+;		Raises an error if clauses is not a pair, if the car of
+;		clauses is not a pair, or if the car of clauses does not
+;		evaluate to a boolean.
+($define $cond ($closure loop (env . clauses)
+	($if (pair? clauses)
+		($let (x . clauses) clauses
+			($if (pair? x)
+				($let (test . body) x
+					($define test (apply eval test env))
+					($if (boolean? test)
+						($cond
+							((pair? body)
+								(apply sequence-aux env . body))
+							((null? body) #inert)
+							(#t (error)))
+						(error)))
+				(error)))
+		(error))))

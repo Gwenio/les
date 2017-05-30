@@ -1,0 +1,316 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	These macros define a language much easier to work with
+;	than raw PLES.
+
+;	Wrap the contents of the file in $sequence and expand it, unless the file is empty.
+(() root body
+	($if (null? body)
+		($sequence
+			(warn "Empty file.")
+			#null)
+		(list ($seq body))))
+
+;	S-expressions that do not follow the form of a macro are invalid.
+;	Symbols are expanded to a lookup instruction.
+;	Other literals are quoted.
+(_ default expr
+	($cond
+		((pair? expr)
+			(error "Invalid expression."))
+		((symbol? expr)
+			(list $lookup expr))
+		(#t (expand $quote expr))))
+
+;	Used to insert literal expressions into the code.
+;	_expr is not expanded.
+($quote quote-form (_expr))
+
+;	Used to check that parameter trees are valid.
+(#inert $parameter-tree (tree)
+	($cond
+		((pair? tree)
+			($define (head . tail) tree)
+			(cons
+				($parameter-tree head)
+				($parameter-tree tail)))
+		((symbol? tree) tree)
+		((null? tree) ())
+		((ignore? tree) _)
+		(#t (error
+			"Parameter trees can only contain pairs, symbols, #ignore, and #null."))))
+
+;	Recursively expands the body of ($sequence . body)
+(#inert $seq (body)
+	($cond
+		((pair? body)
+			($define (head . tail) body)
+			(cons (expand . head) ($seq tail)))
+		((null? body) ())
+		(#t (error
+			"Expected a pair or #null in the tail position."))))
+
+;	Allows a sequence of expressions to be evaluated,
+;	and evaluates to the value last sub-expression.
+($sequence sequence-form body
+	($cond
+		((pair? body)
+			($if (null? (cdr body))
+				($let body (car body)
+					(expand . body))
+				(cons $sequence ($seq body))))
+		((null? body)
+			(warn "($sequence) is equivalent to #inert.")
+			(expand . #inert))
+		(#t (error
+			"The form ($sequence . body) requires body to be a list."))))
+
+;	Isolates environment changes with $define to the lexical scope of the expression.
+;	Body is a $sequence.
+($scope scope-form body
+	($cond
+		((pair? body)
+			(list $scope (cons $sequence ($seq body))))
+		((null? body)
+			(warn "($scope) is equivalent to #inert.")
+			(expand . #inert))
+		(#t (error "The form ($scope . body) requires body to be a list."))))
+
+;	Equivalent to (apply ($closure _ keys . body) . values), but without creating a closure.
+($let let-form (keys values . body)
+	(assert (not? (null? keys))
+		"The form ($let keys values . body) requires keys to not be #null.")
+	($define values (expand . values))
+	($cond
+		((pair? body)
+			($if (ignore? keys)
+				(warn
+					"($let #ignore values . body) is equivalent to ($sequence values ($scope . body)).")
+				#inert)
+			(list $let ($parameter-tree keys) values (cons $sequence ($seq body))))
+		((null? body)
+			(warn "In ($let keys values . body) body is #null, making it equivalent to ($sequence values #inert).")
+			(list $sequence values (expand . #inert)))
+		(#t (error
+			"The form ($let keys values . body) requires body to be a pair or #null."))))
+
+;	Assigns values to symbolic identifiers in the current environment.
+;	Evaluates to #inert.
+($define define-form (keys values)
+	($define values (expand . values))
+	($cond
+		((null? keys)
+			(error "The form ($define keys values) requires keys to not be #null."))
+		((ignore? keys)
+			(warn "When keys is #ignore in ($define keys values), it is equivalent to ($sequence values #inert).")
+			(list $sequence values (expand . #inert)))
+		(#t (list $sequence (list $define ($parameter-tree keys) values) (expand . #inert)))))
+
+;	Creates a closure.
+;	loop is #ignore or a symbol to call the closure recursively.
+;	parameters is a tree indicating they symbols to assign arguments to
+;		in a child of the environment the closure was created in.
+;	body is a $sequence.
+($closure _ (loop parameters . body)
+	(assert (or? (symbol? loop) (ignore? loop))
+		"The form ($closure loop parameters . body) requires loop to be a symbol or #ignore.")
+	($define body ($if (null? body)
+		($sequence
+			(warn "When the body of a $closure is #null it always returns #inert.")
+			(expand . #inert))
+		($seq body)))
+	(list $closure (cons loop ($parameter-tree parameters)) body))
+
+;	Conditional branching. x is evaluated if test is #true, y if test is #false.
+($if if-form (test x y)
+	($cond
+		((equal? #t test)
+			(warn "When the test of an $if expression is literal #true, the second branch is never executed.")
+			(expand . x))
+		((equal? #f test)
+			(warn "When the test of an $if expression is literal #false, the first branch is never executed.")
+			(expand . y))
+		((pair? test)
+			(list $if
+				(expand . test)
+				(expand . x)
+				(expand . y)))
+		(#t
+			(error "The test of a conditional must be boolean or an expression."))))
+
+;	Expands to a series of $if expressions.
+;	The last test must be literal #true.
+($cond cond-form ((test . body) . clauses)
+	($if (null? clauses)
+		($sequence
+			(assert (equal? #t test)
+				"The last clause of $cond must have literal #true as the condition.")
+			(cons $sequence ($seq body)))
+		(expand $if test
+			(list $sequence . body)
+			(list $cond . clauses))))
+
+;	Equivalent to ($let y z (list x . y)).
+;	The difference between (cons x y) and (list x . y)
+;	is that the latter may not work as expected if it is
+;	a list such as (list x . ($quote (y z))).
+;	Such an expression would be processed as (list x $quote (y z)).
+;	Which is likely not the intended result.
+(cons cons-call (x y))
+
+;	Used to make a list.
+;	Equivalent to ($let x body x).
+;	In other words it mainly exist to indicate an expression should
+;	remain a list rather than being processed as a special form.
+(list list-call body
+	($if (pair? body)
+		($sequence
+			($define (head . tail) body)
+			(list cons (expand . head) (expand list . tail)))
+		(expand . body)))
+
+;	Calls a closure with a set of arguments.
+;	e.g. (apply ($closure _ parameters . body) . args)
+(apply _ (op . args)
+	(list apply (expand . op) (expand list . args)))
+
+;	Makes a object representing the current continuation,
+;	and binds it to symbol cc in a new scope where body is evaluated.
+;
+;	Continuations are closures, the only difference is arguments
+;	passed to them with apply are returned as the result of $let/cc
+;	instead of being bound to a parameter tree.
+;
+;	Unlike Scheme continuations, these are valid as long as the
+;	created object is deemed reachable by the garbage collector.
+($let/cc _ (cc . body)
+	(assert (symbol? cc) "($let/cc cc . body) requires cc to be a symbol.")
+	(assert (pair? body) "($let/cc cc . body) requires body to be a list of expressions.")
+	($define body ($seq body))
+	(list $let/cc cc (list mark) $sequence . body))
+
+;	Internal macro for invocation of built in functions.
+;
+;	Note that when PLES is converted to ALES
+;	by this macro file, the argument list
+;	for invoke always has #null at the tail.
+;
+;	This is an artefact of the exploratory
+;	interpreter written in Elixir that
+;	called apply(Invoke, op, args) to call
+;	a function with the name of the operation
+;	identifier in module Invoke as pass it args.
+(#inert $invoke (op . args)
+	(assert (symbol? op)
+		"Internal Error: The operation for an invoke must be a symbol.")
+	(list invoke op (expand list . args))
+
+;	Tags data so that it does not match the standard types.
+;	Used to add arbitrary types.
+($seal (type obj)
+	(assert (symbol? type)
+		"The form ($seal type obj) requires type to be a symbol.")
+	($invoke seal (list $quote type) obj))
+
+;	Checks if obj is a value returned by $seal with type.
+($seal-type? _ (type obj)
+	(assert (symbol? type)
+		"The form ($seal-type? type obj) requires type to be a symbol.")
+	($type? type obj))
+
+;	Extracts the original value that was passed to $seal from obj.
+;	type is provided for error checking.
+($unseal _ (type obj)
+	(assert (symbol? type)
+		"The form ($unseal type obj) requires type to be a symbol.")
+	($invoke unseal (list $quote type) obj))
+
+;	Gets the first element of a pair.
+;	Equivalent to ($let (y . _) x y).
+(car car-call (x)
+	($invoke car x))
+
+;	Gets the second element of a pair.
+;	Equivalent to ($let (_ . y) x y).
+(cdr cdr-call (x)
+	($invoke cdr x))
+
+;	Returns the current process
+(process _ () ($invoke process))
+
+;	Returns #true if x and y are equal; otherwise, #false.
+(equal? equal-check (x y) ($invoke equal? x y))
+
+;	Creates a new process that calls func with no arguments
+;	and returns the pid of the new process.
+(spawn _ (func) ($invoke spawn func))
+
+;	Calls for linking and unlinking processes.
+(link _ (pid) ($invoke link pid))
+(unlink _ (pid) ($invoke unlink pid))
+
+;	Calls for monitoring a procees and cancelling the observation.
+(monitor _ (pid) ($invoke monitor pid))
+(demonitor _ (ref) ($invoke demonitor ref))
+
+;	Internal macro for type checks.
+(#inert $type? (type x)
+	(assert (symbol? op)
+		"Internal Error: The type identifier for a type check must be a symbol.")
+	($invoke type? (list $quote type) x)))
+
+;	Type check for #inert.
+(inert? inert-check (x) ($type? inert x))
+
+;	Type check for #ignore.
+(ignore? ignore-check (x) ($type? ignore x))
+
+;	Type check for #null.
+(null? null-check (x) ($type? null x))
+
+;	Type check for symbols.
+(symbol? symbol-check (x) ($type? symbol x))
+
+;	Type check for pairs.
+(pair? pair-check (x) ($type?  pair x))
+
+;	Type check for closures.
+(closure? closure-check (x) ($type? closure x))
+
+;	Type check for booleans.
+(boolean? boolean-check (x) ($type? boolean x))
+
+;	Type check for process identifiers.
+(pid? pid-check (x) ($type? pid x))
+
+;	Type check for process monitors.
+(monitor? monitor-check (x) ($type? monitor x))
+
+;	Type check for timers.
+(timer? timer-check (x) ($type? timer x))
+
+;	Type check for text strings.
+(string? string-check (x) ($type? string x))
+
+;	Type check for blobs of raw bytes.
+(blob? blob-check (x) ($type? blob x))
+
+;	Place holder for raising errors.
+;	Fail building if present for the time being.
+(error error-place-holder ()
+	(error "Error signalling place holder present.")

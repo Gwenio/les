@@ -1,0 +1,178 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	($scope . body)
+;	Operative - captures current environment.
+;
+;	Summary: Evaluates body in a new child of the calling environment.
+;
+;	Returns: #inert if body is #null or the result of the last expression.
+;
+;	Parameters:
+;	body	#null or a list of expressions.
+;
+;	Details:
+;		Same as $sequence, but also isolates changes to the environment.
+($define $scope ($closure _ (env . x)
+	($if (null? x)
+		#inert
+		($if (pair? x)
+			(apply sequence-aux (apply make-environment env) . x)
+			(error)))))
+
+;	($let keys values . body)
+;	Operative - captures current environment.
+;
+;	Summary: Evaluates body in a new child of the calling environment.
+;			Also binds additional values to the new environment.
+;
+;	Returns: #inert if body is #null or the result of the last expression.
+;
+;	Parameters:
+;	keys	A tree of the keys to assign values to.
+;	values	The values to assign.
+;	body	#null or a list of expressions.
+;
+;	Details:
+;		Same as $sequence, but also isolates changes to the environment.
+;
+;	See:
+;		$define!
+($define $let ($combiner _ env x (keys values . body)
+	($cond
+		((pair? body)
+			($define values (apply eval values env))
+			($define env (apply make-environment env))
+			(apply assign! env keys values)
+			(apply sequence-aux env . body))
+		((null? body)
+			(apply eval values env)
+			#inert)
+		(#t (error)))))
+
+;	($let-rec keys values . body)
+;	Operative - captures current environment.
+;
+;	Summary: Evaluates body in a new child of the calling environment.
+;			Also binds additional values to keys in the new environment.
+;
+;	Returns: #inert if body is #null or the result of the last expression.
+;
+;	Parameters:
+;	keys	A tree of the keys to assign values to.
+;	values	The values to assign.
+;	body	#null or a list of expressions.
+;
+;	Details:
+;		$let evaluates the values expression in the calling environment;
+;		however, $let-rec evaluates it in the child environment allowing
+;		any combiners created by $vau or $lambda during evaluation to view
+;		the symbols defined by $let-rec.
+;
+;		This also means any mutation of the environment caused by evaluation
+;		will not affect the calling environment while it would for $let.
+;
+;	See:
+;		$define!
+;		$let
+($define $let-rec ($closure _ (env . x)
+	($if (pair? x)
+		($let (keys . x) x
+			($if (pair? x)
+				($let (values . x) x
+					($cond
+						((pair? x)
+							($define env (apply make-environment env))
+							(apply assign! env keys (apply eval values env))
+							(apply sequence-aux env . x))
+						((null? x) #inert)
+						(#t (error))))
+				(error)))
+		(error))))
+
+;	($let-blank keys values . body)
+;	Operative - captures current environment.
+;
+;	Summary: Evaluates body in a new environment with no parents.
+;			Binds additional values to keys in the new environment.
+;
+;	Returns: #inert if body is #null or the result of the last expression.
+;
+;	Parameters:
+;	keys	A tree of the keys to assign values to.
+;	values	The values to assign.
+;	body	#null or a list of expressions.
+;
+;	Details:
+;		Equivalent to ($let-redirect (make-environment) keys values . body).
+;
+;	See:
+;		$define!
+;		$let
+($define $let-blank ($closure _ (env . x)
+	($if (pair? x)
+		($let (keys . x) x
+			($if (pair? x)
+				($let (values . x) x
+					($cond
+						((pair? x)
+							($define values (apply eval values env))
+							($define env (apply blank-environment))
+							(apply assign! env keys values)
+							(apply sequence-aux env . x))
+						((null? x) #inert)
+						(#t (error))))
+				(error)))
+		(error))))
+
+;	($let-redirect env keys values . body)
+;	Operative - captures current environment.
+;
+;	Summary: Evaluates body in a child of env.
+;			Binds values to keys in the new environment.
+;
+;	Returns: #inert if body is #null or the result of the last expression.
+;
+;	Parameters:
+;	keys	A tree of the keys to assign values to.
+;	values	The values to assign.
+;	body	#null or a list of expressions.
+;
+;	Details:
+;		values is evalated in the calling environment.
+;
+;	See:
+;		$define!
+;		$let
+($define $let-redirect ($closure _ (env . x)
+	($if (pair? x)
+		($let (target . x) x
+			($if (pair? x)
+				($let (keys . x) x
+					($if (pair? x)
+						($let (values . x) x
+							($cond
+								((pair? x)
+									($define values (apply eval values env))
+									($define env (apply make-environment target))
+									(apply assign! env keys values)
+									(apply sequence-aux env . x))
+								((null? x) #inert)
+								(#t (error))))
+						(error)))
+				(error)))
+		(error))))

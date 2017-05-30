@@ -1,0 +1,56 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	(link pid)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: Applicative for getting the pid of the current process.
+;
+;	Parameters:
+;	pid	The process to link with the current process.
+;
+;	Returns: #inert
+;
+;	Details:
+;		If one of the linked processes exits, so will the other.
+;		Unless the one that is being told to exit as collateral
+;		has set the process flag to trap exits.
+($define link ($seal applicative
+	($combiner _ _ args (x)
+		($if (pid? x)
+			(link x)
+			(error)))))
+
+;	(unlink pid)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: Makes the calling process no longer be linked to pid.
+;
+;	Parameters:
+;	pid	The process to link with the current process.
+;
+;	Returns: #inert
+;
+;	Details:
+;		If one of the linked processes exits, so will the other.
+;		Unless the one that is being told to exit as collateral
+;		has set the process flag to trap exits.
+($define unlink ($seal applicative
+	($combiner _ _ args (x)
+		($if (pid? x)
+			(unlink x)
+			(error)))))

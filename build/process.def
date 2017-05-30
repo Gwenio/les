@@ -1,0 +1,30 @@
+
+($source ("" "src" "process" "type_check.les")
+	($macro "" "macro" "type_check.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (pid? monitor? timer?) ()))
+
+($source ("" "src" "process" "spawn.les")
+	($macro "" "macro" "combiner.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (spawn) ()))
+
+($source ("" "src" "process" "link.les")
+	($macro "" "macro" "combiner.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (link unlink) ()))
+
+($source ("" "src" "process" "monitor.les")
+	($macro "" "macro" "combiner.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (monitor demonitor) ()))
+
+($source ("" "src" "process" "current.les")
+	($macro "" "macro" "combiner.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (process) ()))
+
+($source ("" "src" "process" "alive.les")
+	($macro "" "macro" "type_check.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (alive?) ()))

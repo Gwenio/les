@@ -1,0 +1,136 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	(car x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: Gets the head of a pair.
+;
+;	Returns: The value located in the head of pair x.
+;
+;	Parameters:
+;	x	A pair.
+;
+;	Details:
+;		($let (y . _) x y)
+($define car ($seal applicative
+	($combiner _ _ args (x)
+		($if (pair? x)
+			(car x)
+			(error)))))
+
+;	(cdr x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: Gets the tail of a pair.
+;
+;	Returns: The value located in the tail of pair x.
+;
+;	Parameters:
+;	x	A pair.
+;
+;	Details:
+;		($let (_ . y) x y)
+($define cdr ($seal applicative
+	($combiner _ _ args (x)
+		($if (pair? x)
+			(cdr x)
+			(error)))))
+
+;	(caar x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: (car (car x))
+;
+;	Returns: The value located in the head of the head of pair x.
+;
+;	Parameters:
+;	x	A pair.
+;
+;	Details:
+;		($let ((y . _) . _) x y)
+($define caar ($seal applicative
+	($combiner _ _ args (x)
+		($if (pair? x)
+			($let x (car x)
+				($if (pair? x)
+					(car x)
+					(error)))
+			(error)))))
+
+;	(cadr x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: (car (cdr x))
+;
+;	Returns: The value located in the head of the head of pair x.
+;
+;	Parameters:
+;	x	A pair.
+;
+;	Details:
+;		($let ((_ . y) . _) x y)
+($define cadr ($seal applicative
+	($combiner _ _ args (x)
+		($if (pair? x)
+			($let x (car x)
+				($if (pair? x)
+					(cdr x)
+					(error)))
+			(error)))))
+
+;	(cdar x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: (cdr (car x))
+;
+;	Returns: The value located in the head of the head of pair x.
+;
+;	Parameters:
+;	x	A pair.
+;
+;	Details:
+;		($let ((y . _) . _) x y)
+($define cdar ($seal applicative
+	($combiner _ _ args (x)
+		($if (pair? x)
+			($let x (cdr x)
+				($if (pair? x)
+					(car x)
+					(error)))
+			(error)))))
+
+;	(cddr x)
+;	Applicative - does not capture the current environment.
+;
+;	Summary: (cdr (cdr x))
+;
+;	Returns: The value located in the head of the head of pair x.
+;
+;	Parameters:
+;	x	A pair.
+;
+;	Details:
+;		($let ((_ . y) . _) x y)
+($define cddr ($seal applicative
+	($combiner _ _ args (x)
+		($if (pair? x)
+			($let x (cdr x)
+				($if (pair? x)
+					(cdr x)
+					(error)))
+			(error)))))

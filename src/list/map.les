@@ -1,0 +1,18 @@
+
+;
+($define reverse ($closure _ (accumulator next)
+	(list next . accumulator)))
+
+;
+($define aux ($closure loop (func output . input)
+	($cond
+		((pair? input)
+			($let (head . tail) input
+				(apply loop func (list (apply func head) . output) . tail)))
+		((null? input)
+			(apply reduce output reverse ()))
+		(#t (error)))))
+
+;
+($define simple ($closure _ (func list)
+	(apply aux func () . list)))

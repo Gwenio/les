@@ -1,0 +1,20 @@
+
+($source ("" "src" "list" "reduce.les")
+	($macro "" "macro" "simplify.les")
+	($export list (internal) (reduce)))
+
+($source ("" "src" "list" "type_check.les")
+	($macro "" "macro" "type_check.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (null? pair? list?) ()))
+
+($source ("" "src" "list" "make.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (list cons) ()))
+
+($source ("" "src" "list" "access.les")
+	($macro "" "macro" "combiner.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel
+		(car cdr caar cadr cdar cddr)
+		()))

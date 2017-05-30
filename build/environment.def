@@ -1,0 +1,43 @@
+
+($source ("" "src" "environment" "type_check.les")
+	($macro "" "macro" "simplify.les")
+	($export environment
+		(internal)
+		(environment?))
+	($export kernel
+		(applicative)
+		(environment?)))
+
+($source ("" "src" "environment" "make.les")
+	($macro "" "macro" "simplify.les")
+	($import environment (environment?) ())
+	($export environment
+		(blank make)
+		(blank-environment make-environment))
+	($export kernel
+		(applicative)
+		(make-environment)))
+
+($source ("" "src" "environment" "assign.les")
+	($macro "" "macro" "simplify.les")
+	($export environment (assign!) ()))
+
+($source ("" "src" "environment" "lookup.les")
+	($macro "" "macro" "simplify.les")
+	($export environment (lookup) ()))
+
+($source ("" "src" "environment" "define.les")
+	($macro "" "macro" "simplify.les")
+	($import environment (assign!) ())
+	($import evaluation (eval) ())
+	($export kernel ($define!) ()))
+
+($source ("" "src" "environment" "let.les")
+	($macro "" "macro" "simplify.les")
+	($import environment
+		(assign! blank-environment make-environment)
+		())
+	($import evaluation (eval sequence-aux) ())
+	($export kernel
+		($scope $let $let-rec $let-blank $let-redirect)
+		()))

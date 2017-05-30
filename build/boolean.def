@@ -1,0 +1,25 @@
+
+($source ("" "src" "boolean" "type_check.les")
+	($macro "" "macro" "type_check.les")
+	($macro "" "macro" "simplify.les")
+	($export boolean (internal) (boolean?))
+	($export kernel (applicative) (boolean?)))
+
+($source ("" "src" "boolean" "not.les")
+	($macro "" "macro" "combiner.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel (not?) ()))
+
+($source ("" "src" "boolean" "and.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel ($and? and?) ()))
+
+($source ("" "src" "boolean" "or.les")
+	($macro "" "macro" "simplify.les")
+	($export kernel ($or? or?) ()))
+
+($source ("" "src" "boolean" "xor.les")
+	($macro "" "macro" "simplify.les")
+	($import boolean (boolean?) ())
+	($import list (reduce) ())
+	($export kernel (xor?) ()))

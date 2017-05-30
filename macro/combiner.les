@@ -1,0 +1,68 @@
+
+;	ISC License (ISC)
+;
+;	Copyright 2017 Adam Armstrong
+;
+;	Permission to use, copy, modify, and/or distribute this software for any
+;	purpose with or without fee is hereby granted, provided that the above copyright
+;	notice and this permission notice appear in all copies.
+;
+;	THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+;	REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND
+;	FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+;	INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+;	LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+;	OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+;	PERFORMANCE OF THIS SOFTWARE.
+
+;	Defines a macro to write combiners for exporting to LES.
+;	This mainly involves checking parameters.
+;	It is expected that this will be applied before "simplify.les".
+
+;	Used by $combiner to expand a check for the correct number of arguments.
+(#inert $arity (args parameters . body)
+	($cond
+		((null? parameters)
+			(list $if (list null? args)
+				(list $sequence . body)
+				(list error)))
+		((ignore? parameters)
+			(list $sequence . body))
+		((symbol? parameters)
+			(list $sequence ($define parameters args) . body))
+		((pair?)
+			($define (head . tail) parameters)
+			($cond
+				((symbol? head)
+					(list $if (list pair? args)
+						(list $let (cons head args) ($arity args tail . body))
+						(list error)))
+				((ignore? head)
+					(list $if (list pair? args)
+						(list $let (cons #ignore args) ($arity args tail . body))
+						(list error)))
+				((null? head)
+					(list $if (list pair? args)
+						(list $if (list null? (list car args))
+							(list $let (cons #ignore args) ($arity args tail . body))
+							(list error))
+						(list error)))
+				(#t (error "Expected a symbol or #ignore."))))
+		(#t (error "Unexpected parameter type."))))
+
+;	Macro for functions that will be exposed in the standard environment.
+;	Can be for operatives and applicatives.
+;
+;	loop is the symbol to bind for recursive calls.
+;	env is the name for the environment provided by eval.
+;	args is a variable name for the list of arguments recieved.
+;	parameters is a list of parameter names to bind args to.
+;	body is the body of the combiner.
+;
+;	Note that parameters should only contain symbols,
+;	#ignore, and #null.
+($combiner _ (loop env args parameters . body)
+	(assert (or? (symbol? loop) (ignore? loop)))
+	(assert (or? (symbol? env) (ignore? env)))
+	(list $closure loop (env . args)
+		($arity args parameters . body)))
